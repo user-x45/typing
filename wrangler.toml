@@ -1,3 +1,13 @@
 name = "typing"
 main = "src/index.js"
 compatibility_date = "2026-07-06"
+
+# Durable Object binding — index.js は env.ARENA.idFromName(...) を呼んでいるので必須
+[[durable_objects.bindings]]
+name = "ARENA"
+class_name = "Arena"
+
+# 新しい Durable Object クラスを追加したときは migrations が必須
+[[migrations]]
+tag = "v1"
+new_classes = ["Arena"]
