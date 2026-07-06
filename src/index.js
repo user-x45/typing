@@ -266,8 +266,8 @@ export class Arena {
     this.send(room.player1Id, resultPayload);
     this.send(room.player2Id, resultPayload);
 
-    // 次のターンへ（軽く間を空けて相手が結果を見られるようにする）
-    setTimeout(() => this.startNextTurn(room), 900);
+    // 次のターンへ（結果表示のタイムラグを最小限に抑える）
+    setTimeout(() => this.startNextTurn(room), 250);
   }
 
   endGame(room) {
