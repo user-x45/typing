@@ -7,7 +7,8 @@ compatibility_date = "2026-07-06"
 name = "ARENA"
 class_name = "Arena"
 
-# 新しい Durable Object クラスを追加したときは migrations が必須
+# Workers Free プランでは SQLite-backed Durable Objects のみ利用可能なため
+# new_classes ではなく new_sqlite_classes を使う
 [[migrations]]
 tag = "v1"
-new_classes = ["Arena"]
+new_sqlite_classes = ["Arena"]
