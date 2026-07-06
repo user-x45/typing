@@ -1,280 +1,314 @@
-// Cloudflare Workers code with WebSockets & Durable Objects
-// Typing Game Multiplayer Room Hub
+// ============================================================
+// ポカポカひらがなタイピング - オンライン対戦サーバー
+// Cloudflare Workers + Durable Objects
+// ============================================================
+//
+// エンドポイント:
+//   wss://<your-worker>.workers.dev/ws
+//
+// クライアント -> サーバー メッセージ:
+//   { action: 'match', mode: 'kana' | 'roma' }
+//   { action: 'sync_preview', text: string }
+//   { action: 'submit', status: 'correct' | 'incorrect' | 'skip', time: number }
+//
+// サーバー -> クライアント メッセージ:
+//   { type: 'welcome', id }                                            接続直後に送信される自分のID
+//   { type: 'matched', opponentId, opponentName, firstTurnPlayerId }
+//   { type: 'next_turn', round, turnPlayerId, word: {kana, roma} }
+//   { type: 'sync_preview', text }
+//   { type: 'turn_result', playerId, status, points,
+//     scores: { player1Id, player1, player2Id, player2 } }
+//   { type: 'game_over', player1Id, player2Id, score1, score2 }
+//
+// ============================================================
+
+const WORD_LIST = [
+  { kana: "いぬ", roma: "inu" },
+  { kana: "ねこ", roma: "neko" },
+  { kana: "うさぎ", roma: "usagi" },
+  { kana: "きりん", roma: "kirin" },
+  { kana: "らいおん", roma: "raion" },
+  { kana: "くま", roma: "kuma" },
+  { kana: "ぱんだ", roma: "panda" },
+  { kana: "りす", roma: "risu" },
+  { kana: "ぞう", roma: "zou" },
+  { kana: "きつね", roma: "kitsune" },
+  { kana: "りんご", roma: "ringo" },
+  { kana: "おにぎり", roma: "onigiri" },
+  { kana: "らーめん", roma: "raamen" },
+  { kana: "すし", roma: "sushi" },
+  { kana: "めろんぱん", roma: "meronpan" },
+  { kana: "いちご", roma: "ichigo" },
+  { kana: "てんぷら", roma: "tenpura" },
+  { kana: "うどん", roma: "udon" },
+  { kana: "ぎょうざ", roma: "gyouza" },
+  { kana: "ぷりん", roma: "purin" },
+  { kana: "つくえ", roma: "tsukue" },
+  { kana: "えんぴつ", roma: "enpitsu" },
+  { kana: "こうえん", roma: "kouen" },
+  { kana: "てれび", roma: "terebi" },
+  { kana: "じてんしゃ", roma: "jitensha" },
+  { kana: "がっこう", roma: "gakkou" },
+  { kana: "でんしゃ", roma: "densha" },
+  { kana: "かばん", roma: "kaban" },
+  { kana: "とけい", roma: "tokei" },
+  { kana: "ほうき", roma: "houki" },
+];
+
+const CUTE_NAME_PARTS = ["こむぎ", "みかん", "そら", "ひなた", "つき", "うみ", "もも", "さくら", "こゆき", "はる"];
+
+function randomWord() {
+  return WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+}
+
+function randomName() {
+  const p = CUTE_NAME_PARTS[Math.floor(Math.random() * CUTE_NAME_PARTS.length)];
+  const n = Math.floor(Math.random() * 900) + 100;
+  return `${p}${n}`;
+}
+
+function scoreForSubmit(status, time) {
+  if (status !== "correct") return 0;
+  // 速く正解するほど高得点。最低10点、最大150点。
+  const raw = Math.round(150 - time * 10);
+  return Math.max(10, raw);
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Routing WebSocket upgrade requests to Durable Object
     if (url.pathname === "/ws") {
       if (request.headers.get("Upgrade") !== "websocket") {
-        return new Response("Expected Upgrade: websocket", { status: 426 });
+        return new Response("Expected WebSocket upgrade", { status: 426 });
       }
-
-      // Generate a unique player ID for current session connection
-      const playerId = crypto.randomUUID();
-      const id = env.TYPING_BATTLE.idFromName("LOBBY");
-      const stub = env.TYPING_BATTLE.get(id);
-
-      // Forward request directly to Durable Object
-      return stub.fetch(new Response(null, {
-        headers: {
-          "Upgrade": "websocket",
-          "X-Player-ID": playerId
-        }
-      }));
+      // 全プレイヤーを単一の Arena Durable Object に集約してマッチメイキングする
+      const id = env.ARENA.idFromName("global-arena");
+      const stub = env.ARENA.get(id);
+      return stub.fetch(request);
     }
 
-    return new Response("Typing Battle Server Online", { status: 200 });
-  }
+    return new Response("typing game realtime server", { status: 200 });
+  },
 };
 
-// Words list shared specifically on server logic
-const BATTLE_WORDS = [
-  { kana: "いぬ", roma: "inu" },
-  { kana: "ねこ", roma: "neko" },
-  { kana: "うさぎ", roma: "usagi" },
-  { kana: "つくえ", roma: "tsukue" },
-  { kana: "えんぴつ", roma: "enpitsu" },
-  { kana: "おにぎり", roma: "onigiri" },
-  { kana: "ぱそこん", roma: "pasokon" },
-  { kana: "らいおん", roma: "raion" },
-  { kana: "すし", roma: "sushi" },
-  { kana: "じてんしゃ", roma: "jitensha" }
-];
-
-export class TypingBattle {
+export class Arena {
   constructor(state, env) {
     this.state = state;
-    // Track matching queue
-    this.waitingQueue = []; // [{ id, ws, name, mode }]
-    this.rooms = new Map(); // roomId -> Room state object
+    this.env = env;
+    // メモリ上の状態（この Durable Object インスタンスが生きている間だけ保持）
+    this.sockets = new Map();  // playerId -> WebSocket
+    this.waiting = new Map();  // mode -> playerId (待機中のプレイヤー、モードごとに1人まで)
+    this.rooms = new Map();    // playerId -> room object (room は player1/player2 双方から同じ参照を持つ)
   }
 
   async fetch(request) {
-    const playerId = request.headers.get("X-Player-ID");
-    const [client, server] = new WebSocketPair();
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
 
-    await this.handleSession(server, playerId);
+    server.accept();
+    const playerId = crypto.randomUUID();
+    this.sockets.set(playerId, server);
 
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
-  }
+    server.send(JSON.stringify({ type: "welcome", id: playerId }));
 
-  async handleSession(ws, playerId) {
-    ws.accept();
-
-    const playerName = `タイピスト-${playerId.slice(0, 4).toUpperCase()}`;
-
-    ws.on("message", (msgStr) => {
+    server.addEventListener("message", (event) => {
+      let msg;
       try {
-        const msg = JSON.parse(msgStr);
-        this.processMessage(ws, playerId, playerName, msg);
+        msg = JSON.parse(event.data);
       } catch (e) {
-        console.error("Message parse failed: ", e);
+        return;
       }
+      this.handleMessage(playerId, msg);
     });
 
-    ws.on("close", () => {
-      this.handlePlayerLeave(playerId);
-    });
+    const onClose = () => this.handleDisconnect(playerId);
+    server.addEventListener("close", onClose);
+    server.addEventListener("error", onClose);
 
-    ws.on("error", () => {
-      this.handlePlayerLeave(playerId);
-    });
+    return new Response(null, { status: 101, webSocket: client });
   }
 
-  processMessage(ws, playerId, playerName, msg) {
-    if (msg.action === 'match') {
-      // 1. Remove if already in queue
-      this.waitingQueue = this.waitingQueue.filter(p => p.id !== playerId);
-
-      // 2. Look for compatible opponent (same input mode preferred or any)
-      const opponent = this.waitingQueue.find(p => p.mode === msg.mode);
-
-      if (opponent) {
-        // Match found!
-        this.waitingQueue = this.waitingQueue.filter(p => p.id !== opponent.id);
-        this.createRoom(playerId, ws, playerName, opponent.id, opponent.ws, opponent.name, msg.mode);
-      } else {
-        // Enqueue
-        this.waitingQueue.push({
-          id: playerId,
-          ws: ws,
-          name: playerName,
-          mode: msg.mode
-        });
-      }
-    }
-
-    else if (msg.action === 'sync_preview') {
-      // Broadcast current input characters directly to the opponent in real-time
-      const room = this.findRoomByPlayer(playerId);
-      if (room) {
-        const opponentWs = (room.p1.id === playerId) ? room.p2.ws : room.p1.ws;
-        opponentWs.send(JSON.stringify({
-          type: 'sync_preview',
-          text: msg.text
-        }));
-      }
-    }
-
-    else if (msg.action === 'submit') {
-      // Verify turn and score the points
-      const room = this.findRoomByPlayer(playerId);
-      if (room && room.turnPlayerId === playerId) {
-        this.handleTurnSubmission(room, playerId, msg.status, msg.time);
+  send(playerId, payload) {
+    const ws = this.sockets.get(playerId);
+    if (ws && ws.readyState === WebSocket.READY_STATE_OPEN) {
+      try {
+        ws.send(JSON.stringify(payload));
+      } catch (e) {
+        // ignore
       }
     }
   }
 
-  createRoom(p1Id, p1Ws, p1Name, p2Id, p2Ws, p2Name, mode) {
-    const roomId = crypto.randomUUID();
-    
-    // Choose randomly who goes first
-    const firstTurnPlayerId = Math.random() < 0.5 ? p1Id : p2Id;
-
-    // Shuffle word list
-    const roomWords = [...BATTLE_WORDS].sort(() => Math.random() - 0.5);
-
-    const roomState = {
-      id: roomId,
-      p1: { id: p1Id, ws: p1Ws, name: p1Name, score: 0 },
-      p2: { id: p2Id, ws: p2Ws, name: p2Name, score: 0 },
-      words: roomWords,
-      round: 1, // Max 10 turns total (5 turns each)
-      turnPlayerId: firstTurnPlayerId,
-      mode: mode
-    };
-
-    this.rooms.set(roomId, roomState);
-
-    // Notify matched event
-    p1Ws.send(JSON.stringify({
-      type: 'matched',
-      opponentId: p2Id,
-      opponentName: p2Name,
-      firstTurnPlayerId: firstTurnPlayerId
-    }));
-
-    p2Ws.send(JSON.stringify({
-      type: 'matched',
-      opponentId: p1Id,
-      opponentName: p1Name,
-      firstTurnPlayerId: firstTurnPlayerId
-    }));
-
-    // Trigger game loop
-    this.sendNextTurn(roomState);
+  handleMessage(playerId, msg) {
+    switch (msg.action) {
+      case "match":
+        this.handleMatch(playerId, msg);
+        break;
+      case "sync_preview":
+        this.handleSyncPreview(playerId, msg);
+        break;
+      case "submit":
+        this.handleSubmit(playerId, msg);
+        break;
+    }
   }
 
-  sendNextTurn(room) {
-    const wordIndex = (room.round - 1) % room.words.length;
-    const currentWord = room.words[wordIndex];
+  handleMatch(playerId, msg) {
+    const mode = msg.mode === "roma" ? "roma" : "kana";
+    const waitingId = this.waiting.get(mode);
 
-    const turnPayload = {
-      type: 'next_turn',
+    if (waitingId && waitingId !== playerId && this.sockets.has(waitingId)) {
+      // 待機中の相手が見つかったのでマッチ成立
+      this.waiting.delete(mode);
+
+      const player1Id = waitingId;
+      const player2Id = playerId;
+      const firstTurnPlayerId = Math.random() < 0.5 ? player1Id : player2Id;
+
+      const room = {
+        mode,
+        player1Id,
+        player2Id,
+        name1: randomName(),
+        name2: randomName(),
+        score1: 0,
+        score2: 0,
+        round: 0,
+        turnPlayerId: firstTurnPlayerId,
+        currentWord: null,
+      };
+      this.rooms.set(player1Id, room);
+      this.rooms.set(player2Id, room);
+
+      this.send(player1Id, {
+        type: "matched",
+        opponentId: player2Id,
+        opponentName: room.name2,
+        firstTurnPlayerId,
+      });
+      this.send(player2Id, {
+        type: "matched",
+        opponentId: player1Id,
+        opponentName: room.name1,
+        firstTurnPlayerId,
+      });
+
+      // 少し間を空けてゲーム開始（クライアント側の3,2,1カウントダウンに合わせる）
+      setTimeout(() => this.startNextTurn(room), 3300);
+    } else {
+      // 相手がいなければ待機列に入る
+      this.waiting.set(mode, playerId);
+    }
+  }
+
+  startNextTurn(room) {
+    if (room.round >= 10) {
+      this.endGame(room);
+      return;
+    }
+    room.round += 1;
+    room.currentWord = randomWord();
+    // ラウンドごとにターンを交代
+    room.turnPlayerId =
+      room.round === 1
+        ? room.turnPlayerId
+        : room.turnPlayerId === room.player1Id
+        ? room.player2Id
+        : room.player1Id;
+
+    const payload = {
+      type: "next_turn",
       round: room.round,
       turnPlayerId: room.turnPlayerId,
-      word: currentWord
+      word: room.currentWord,
     };
-
-    room.p1.ws.send(JSON.stringify(turnPayload));
-    room.p2.ws.send(JSON.stringify(turnPayload));
+    this.send(room.player1Id, payload);
+    this.send(room.player2Id, payload);
   }
 
-  handleTurnSubmission(room, playerId, status, time) {
-    let points = 0;
-    const player = (room.p1.id === playerId) ? room.p1 : room.p2;
+  handleSyncPreview(playerId, msg) {
+    const room = this.rooms.get(playerId);
+    if (!room) return;
+    if (room.turnPlayerId !== playerId) return; // 自分のターンでなければ無視
 
-    if (status === 'correct') {
-      // Calculate scores dynamically (speed bonus integrated)
-      const baseScore = room.mode === 'roma' ? room.words[(room.round - 1) % room.words.length].roma.length * 100 : room.words[(room.round - 1) % room.words.length].kana.length * 100;
-      const speedBonus = Math.max(0, Math.floor((15 - time) * 30));
-      points = baseScore + speedBonus;
-      player.score += points;
-    } else if (status === 'skip') {
-      points = 0;
+    const opponentId = playerId === room.player1Id ? room.player2Id : room.player1Id;
+    this.send(opponentId, { type: "sync_preview", text: msg.text || "" });
+  }
+
+  handleSubmit(playerId, msg) {
+    const room = this.rooms.get(playerId);
+    if (!room) return;
+    if (room.turnPlayerId !== playerId) return; // 自分のターンでなければ無視
+
+    const status = ["correct", "incorrect", "skip"].includes(msg.status) ? msg.status : "incorrect";
+    const time = typeof msg.time === "number" ? msg.time : 15;
+    const points = scoreForSubmit(status, time);
+
+    if (playerId === room.player1Id) {
+      room.score1 += points;
     } else {
-      // Minor deduction
-      player.score = Math.max(0, player.score - 50);
-      points = -50;
+      room.score2 += points;
     }
 
-    // Broadcast round result to both players
     const resultPayload = {
-      type: 'turn_result',
-      playerId: playerId,
-      status: status,
-      points: points,
+      type: "turn_result",
+      playerId,
+      status,
+      points,
       scores: {
-        player1Id: room.p1.id,
-        player1: room.p1.score,
-        player2Id: room.p2.id,
-        player2: room.p2.score
-      }
+        player1Id: room.player1Id,
+        player1: room.score1,
+        player2Id: room.player2Id,
+        player2: room.score2,
+      },
     };
+    this.send(room.player1Id, resultPayload);
+    this.send(room.player2Id, resultPayload);
 
-    room.p1.ws.send(JSON.stringify(resultPayload));
-    room.p2.ws.send(JSON.stringify(resultPayload));
-
-    // Transition turn
-    room.round++;
-    if (room.round > 10) {
-      // End game
-      this.endGame(room);
-    } else {
-      // Toggle active turn player
-      room.turnPlayerId = (room.turnPlayerId === room.p1.id) ? room.p2.id : room.p1.id;
-      // Delay slightly for visual pacing
-      setTimeout(() => {
-        this.sendNextTurn(room);
-      }, 1500);
-    }
+    // 次のターンへ（軽く間を空けて相手が結果を見られるようにする）
+    setTimeout(() => this.startNextTurn(room), 900);
   }
 
   endGame(room) {
-    const endPayload = {
-      type: 'game_over',
-      player1Id: room.p1.id,
-      score1: room.p1.score,
-      player2Id: room.p2.id,
-      score2: room.p2.score
+    const payload = {
+      type: "game_over",
+      player1Id: room.player1Id,
+      player2Id: room.player2Id,
+      score1: room.score1,
+      score2: room.score2,
     };
+    this.send(room.player1Id, payload);
+    this.send(room.player2Id, payload);
 
-    room.p1.ws.send(JSON.stringify(endPayload));
-    room.p2.ws.send(JSON.stringify(endPayload));
-
-    // Destroy room
-    this.rooms.delete(room.id);
+    this.rooms.delete(room.player1Id);
+    this.rooms.delete(room.player2Id);
   }
 
-  handlePlayerLeave(playerId) {
-    // 1. Remove from waiting queue if active
-    this.waitingQueue = this.waitingQueue.filter(p => p.id !== playerId);
+  handleDisconnect(playerId) {
+    this.sockets.delete(playerId);
 
-    // 2. Clear any active room and notify surviving opponent
-    const room = this.findRoomByPlayer(playerId);
-    if (room) {
-      const opponent = (room.p1.id === playerId) ? room.p2 : room.p1;
-      try {
-        opponent.ws.send(JSON.stringify({
-          type: 'opponent_left'
-        }));
-        opponent.ws.close();
-      } catch (e) {}
-      this.rooms.delete(room.id);
+    // 待機列から削除
+    for (const [mode, id] of this.waiting.entries()) {
+      if (id === playerId) this.waiting.delete(mode);
     }
-  }
 
-  findRoomByPlayer(playerId) {
-    for (const room of this.rooms.values()) {
-      if (room.p1.id === playerId || room.p2.id === playerId) {
-        return room;
+    // 対戦中だった場合は相手に通知して部屋を破棄
+    const room = this.rooms.get(playerId);
+    if (room) {
+      const opponentId = playerId === room.player1Id ? room.player2Id : room.player1Id;
+      this.rooms.delete(room.player1Id);
+      this.rooms.delete(room.player2Id);
+      // 相手のソケットを閉じることで、クライアント側の socket.onclose ハンドラが
+      // 「対戦相手が退室しました」エラーを表示する
+      const ws = this.sockets.get(opponentId);
+      if (ws) {
+        try {
+          ws.close(1000, "opponent_disconnected");
+        } catch (e) {
+          // ignore
+        }
       }
     }
-    return null;
   }
 }
