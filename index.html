@@ -331,6 +331,10 @@
                                 <span class="text-amber-500">❸</span>
                                 <span>オンライン対戦では相手と交互にお題を入力します。リアルタイムに相手の入力が見えます！</span>
                             </li>
+                            <li class="flex gap-2">
+                                <span class="text-amber-500">❹</span>
+                                <span>AI対戦はネット接続なしで練習できます。強さは3段階から選べます！</span>
+                            </li>
                         </ul>
                     </div>
                     
@@ -386,9 +390,19 @@
                                 <button onclick="setTimeLimit(90)" id="time90Btn" class="retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60">90秒</button>
                             </div>
                         </div>
+
+                        <!-- AI Difficulty Selector -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-extrabold text-[#2d2d2d] mb-2">● AI対戦の強さ</label>
+                            <div class="flex gap-4">
+                                <button onclick="setAiDifficulty('easy')" id="aiEasyBtn" class="retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60">🐣 かんたん</button>
+                                <button onclick="setAiDifficulty('normal')" id="aiNormalBtn" class="retro-btn bg-[#ffb84c] flex-1 py-2 font-bold">🤖 ふつう</button>
+                                <button onclick="setAiDifficulty('hard')" id="aiHardBtn" class="retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60">👾 むずかしい</button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <!-- Single Player Start -->
                         <button onclick="startGame()" class="retro-btn bg-[#ff6b6b] hover:bg-[#ff8484] text-white text-xl py-4 flex items-center justify-center gap-3">
                             <span>ひとりで練習！</span>
@@ -398,6 +412,11 @@
                         <button onclick="startMatching()" class="retro-btn bg-indigo-500 hover:bg-indigo-600 text-white text-xl py-4 flex items-center justify-center gap-3">
                             <span>オンライン対戦！</span>
                             <i class="fas fa-globe"></i>
+                        </button>
+                        <!-- AI Battle Start -->
+                        <button onclick="startAiMatch()" class="retro-btn bg-emerald-500 hover:bg-emerald-600 text-white text-xl py-4 flex items-center justify-center gap-3">
+                            <span>AI対戦！</span>
+                            <i class="fas fa-robot"></i>
                         </button>
                     </div>
                 </div>
@@ -784,6 +803,12 @@
         let opponentOnlineScore = 0;
         let currentOnlineWord = null;
 
+        // --- AI BATTLE MODE STATE ---
+        let isAiMode = false;
+        let aiDifficulty = 'normal';
+        let aiRoom = null;
+        let aiPendingTimers = [];
+
         // Load Global HighScore from LocalStorage
         window.addEventListener('load', () => {
             const savedHighScore = localStorage.getItem('typing_high_score');
@@ -862,6 +887,22 @@
             if (currentTimeLimit === 30) btn30.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
             else if (currentTimeLimit === 60) btn60.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
             else if (currentTimeLimit === 90) btn90.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+
+            const btnEasy = document.getElementById('aiEasyBtn');
+            const btnNormal = document.getElementById('aiNormalBtn');
+            const btnHard = document.getElementById('aiHardBtn');
+            [btnEasy, btnNormal, btnHard].forEach(b => {
+                b.className = "retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60";
+            });
+            if (aiDifficulty === 'easy') btnEasy.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+            else if (aiDifficulty === 'normal') btnNormal.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+            else if (aiDifficulty === 'hard') btnHard.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+        }
+
+        function setAiDifficulty(level) {
+            aiDifficulty = level;
+            playSound('keypress');
+            updateSetupUI();
         }
 
         function showScreen(screenId) {
@@ -935,6 +976,137 @@
                 console.error(err);
                 handleMatchingTimeout();
             }
+        }
+
+        // --- AI BATTLE MODE ---
+        const AI_PROFILES = {
+            easy:   { name: "ひよこAI 🐣",   minTime: 3.2, maxTime: 6.5, accuracy: 0.55 },
+            normal: { name: "ふつうAI 🤖",   minTime: 1.8, maxTime: 4.0, accuracy: 0.8 },
+            hard:   { name: "つよつよAI 👾", minTime: 0.7, maxTime: 1.8, accuracy: 0.95 }
+        };
+
+        function clearAiTimers() {
+            aiPendingTimers.forEach(t => { clearTimeout(t); clearInterval(t); });
+            aiPendingTimers = [];
+        }
+
+        function scoreForSubmitClient(status, time) {
+            if (status !== 'correct') return 0;
+            const raw = Math.round(150 - time * 10);
+            return Math.max(10, raw);
+        }
+
+        function startAiMatch() {
+            initAudio();
+            clearAiTimers();
+
+            isOnlineMode = true;
+            isAiMode = true;
+            myId = 'me';
+            opponentId = 'ai';
+
+            const profile = AI_PROFILES[aiDifficulty] || AI_PROFILES.normal;
+            opponentName = profile.name;
+            myOnlineScore = 0;
+            opponentOnlineScore = 0;
+            onlineRound = 0;
+
+            aiRoom = {
+                round: 0,
+                score1: 0,
+                score2: 0,
+                turnPlayerId: Math.random() < 0.5 ? 'me' : 'ai',
+                profile
+            };
+
+            document.getElementById('opponentNameDisplay').textContent = opponentName;
+            document.getElementById('opponentNameBoard').textContent = opponentName;
+
+            showScreen('countdownScreen');
+            startBattleCountdown(aiRoom.turnPlayerId);
+        }
+
+        function randomWordForAi() {
+            const pool = CATEGORIES[currentCategory].words;
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function dispatchTurnResult(who, status, points) {
+            handleServerMessage({
+                type: 'turn_result',
+                playerId: who === 'me' ? myId : opponentId,
+                status: status,
+                points: points,
+                scores: {
+                    player1Id: myId,
+                    player1: aiRoom.score1,
+                    player2Id: opponentId,
+                    player2: aiRoom.score2
+                }
+            });
+        }
+
+        function startNextTurnAi() {
+            if (!aiRoom) return;
+            if (aiRoom.round >= 10) {
+                endAiGame();
+                return;
+            }
+            aiRoom.round += 1;
+            aiRoom.currentWord = randomWordForAi();
+            if (aiRoom.round > 1) {
+                aiRoom.turnPlayerId = (aiRoom.turnPlayerId === 'me') ? 'ai' : 'me';
+            }
+
+            setupNextTurn({
+                round: aiRoom.round,
+                turnPlayerId: aiRoom.turnPlayerId,
+                word: aiRoom.currentWord
+            });
+
+            if (aiRoom.turnPlayerId === 'ai') {
+                playAiTurn();
+            }
+        }
+
+        function playAiTurn() {
+            const profile = aiRoom.profile;
+            const previewContainer = document.getElementById('opponentTypingPreviewContainer');
+            const word = (currentGameMode === 'roma') ? aiRoom.currentWord.roma : aiRoom.currentWord.kana;
+            const thinkTime = profile.minTime + Math.random() * (profile.maxTime - profile.minTime);
+
+            let revealed = 0;
+            const revealInterval = setInterval(() => {
+                revealed++;
+                previewContainer.textContent = `💬 ${opponentName}: 「 ${word.slice(0, revealed)} 」`;
+                if (revealed >= word.length) clearInterval(revealInterval);
+            }, Math.max(80, (thinkTime * 1000) / (word.length + 1)));
+            aiPendingTimers.push(revealInterval);
+
+            const finalTimer = setTimeout(() => {
+                clearInterval(revealInterval);
+                const isCorrect = Math.random() < profile.accuracy;
+                const status = isCorrect ? 'correct' : (Math.random() < 0.5 ? 'incorrect' : 'skip');
+                const points = scoreForSubmitClient(status, thinkTime);
+
+                aiRoom.score2 += points;
+                dispatchTurnResult('ai', status, points);
+
+                const nextTimer = setTimeout(() => startNextTurnAi(), 400);
+                aiPendingTimers.push(nextTimer);
+            }, thinkTime * 1000);
+            aiPendingTimers.push(finalTimer);
+        }
+
+        function endAiGame() {
+            isGameRunning = false;
+            handleServerMessage({
+                type: 'game_over',
+                player1Id: myId,
+                player2Id: opponentId,
+                score1: aiRoom.score1,
+                score2: aiRoom.score2
+            });
         }
 
         function cancelMatching() {
@@ -1058,11 +1230,15 @@
             document.getElementById('comboTitle').textContent = "現在のコンボ";
             document.getElementById('wordsCountTitle').textContent = "対戦の進行状況";
             
-            document.getElementById('timerDisplay').textContent = "オンライン戦";
+            document.getElementById('timerDisplay').textContent = isAiMode ? "AI対戦" : "オンライン戦";
             document.getElementById('myOnlineScore').textContent = "0 点";
             document.getElementById('opponentOnlineScore').textContent = "0 点";
 
             showScreen('gameScreen');
+
+            if (isAiMode) {
+                startNextTurnAi();
+            }
         }
 
         // Setup current Turn word sent by server
@@ -1316,12 +1492,20 @@
             if (isSkip) status = 'skip';
             else if (isCorrect) status = 'correct';
 
-            // Report results instantly to backend so it triggers state shifts
-            socket.send(JSON.stringify({
-                action: 'submit',
-                status: status,
-                time: timeTakenSec
-            }));
+            // Report results instantly to trigger state shifts (backend for online, local sim for AI)
+            if (isAiMode) {
+                const points = scoreForSubmitClient(status, timeTakenSec);
+                aiRoom.score1 += points;
+                dispatchTurnResult('me', status, points);
+                const nextTimer = setTimeout(() => startNextTurnAi(), 400);
+                aiPendingTimers.push(nextTimer);
+            } else {
+                socket.send(JSON.stringify({
+                    action: 'submit',
+                    status: status,
+                    time: timeTakenSec
+                }));
+            }
 
             // Client side feedback
             if (isSkip) {
@@ -1559,7 +1743,11 @@
 
         function backToLobby() {
             clearInterval(timerInterval);
+            clearAiTimers();
             isGameRunning = false;
+            isOnlineMode = false;
+            isAiMode = false;
+            aiRoom = null;
             showScreen('lobbyScreen');
         }
 
