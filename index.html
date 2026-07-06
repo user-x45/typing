@@ -1,0 +1,1485 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ポカポカひらがなタイピング - オンライン対戦版</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Kiwi+Maru:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+    <!-- Tone.js for retro sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', 'Inter', sans-serif;
+            background-color: #f7f3e9;
+        }
+        .font-kiwi {
+            font-family: 'Kiwi Maru', serif;
+        }
+        /* Custom keyframes for lively animations */
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes bounceSlow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        @keyframes correctPulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0px rgba(74, 222, 128, 0.5); }
+            50% { transform: scale(1.03); box-shadow: 0 0 0 15px rgba(74, 222, 128, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0px rgba(74, 222, 128, 0); }
+        }
+        @keyframes pulseRadar {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0px rgba(239, 68, 68, 0.5); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0px rgba(239, 68, 68, 0); }
+        }
+        .pop-in { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .bounce-slow { animation: bounceSlow 3s ease-in-out infinite; }
+        .shake-anim { animation: shake 0.3s ease-in-out; }
+        .correct-pulse { animation: correctPulse 0.4s ease-out; }
+        .radar-pulse { animation: pulseRadar 2s infinite; }
+        
+        /* Neumorphism and retro cards styling */
+        .retro-card {
+            background: #ffffff;
+            border: 4px solid #2d2d2d;
+            box-shadow: 6px 6px 0px #2d2d2d;
+            border-radius: 1.5rem;
+            transition: all 0.2s ease;
+        }
+        .retro-card-interactive:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 8px 8px 0px #2d2d2d;
+        }
+        .retro-card-interactive:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px #2d2d2d;
+        }
+        .retro-btn {
+            background: #ffb84c;
+            border: 3px solid #2d2d2d;
+            box-shadow: 4px 4px 0px #2d2d2d;
+            border-radius: 1rem;
+            font-weight: 800;
+            color: #2d2d2d;
+            transition: all 0.1s ease;
+        }
+        .retro-btn:hover {
+            background: #ffc97a;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px #2d2d2d;
+        }
+        .retro-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px #2d2d2d;
+        }
+        .retro-input {
+            border: 4px solid #2d2d2d;
+            box-shadow: inset 4px 4px 0px rgba(0, 0, 0, 0.05);
+            border-radius: 1rem;
+        }
+        .retro-input:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2), inset 4px 4px 0px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden pb-8">
+
+    <script>
+        // 単語データベースの定義
+        const CATEGORIES = {
+            animals: {
+                name: "どうぶつ 🐻",
+                words: [
+                    { kana: "いぬ", roma: "inu" },
+                    { kana: "ねこ", roma: "neko" },
+                    { kana: "うさぎ", roma: "usagi" },
+                    { kana: "きりん", roma: "kirin" },
+                    { kana: "らいおん", roma: "raion" },
+                    { kana: "くま", roma: "kuma" },
+                    { kana: "ぱんだ", roma: "panda" },
+                    { kana: "りす", roma: "risu" },
+                    { kana: "ぞう", roma: "zou" },
+                    { kana: "きつね", roma: "kitsune" },
+                    { kana: "たぬき", roma: "tanuki" },
+                    { kana: "ぺんぎん", roma: "pengin" },
+                    { kana: "こあら", roma: "koara" },
+                    { kana: "はむすたー", roma: "hamusutaa" },
+                    { kana: "さる", roma: "saru" }
+                ]
+            },
+            foods: {
+                name: "たべもの 🍙",
+                words: [
+                    { kana: "りんご", roma: "ringo" },
+                    { kana: "おにぎり", roma: "onigiri" },
+                    { kana: "らーめん", roma: "raamen" },
+                    { kana: "すし", roma: "sushi" },
+                    { kana: "かれーらいす", roma: "kareeraisu" },
+                    { kana: "めろんぱん", roma: "meronpan" },
+                    { kana: "いちご", roma: "ichigo" },
+                    { kana: "てんぷら", roma: "tenpura" },
+                    { kana: "うどん", roma: "udon" },
+                    { kana: "おふう", roma: "ofuu" },
+                    { kana: "ぎょうざ", roma: "gyouza" },
+                    { kana: "ぴざ", roma: "piza" },
+                    { kana: "けーき", roma: "keeki" },
+                    { kana: "ぷりん", roma: "purin" },
+                    { kana: "たまごやき", roma: "tamagoyaki" }
+                ]
+            },
+            daily: {
+                name: "せいかつ 🏠",
+                words: [
+                    { kana: "つくえ", roma: "tsukue" },
+                    { kana: "えんぴつ", roma: "enpitsu" },
+                    { kana: "こうえん", roma: "kouen" },
+                    { kana: "てれび", roma: "terebi" },
+                    { kana: "じてんしゃ", roma: "jitensha" },
+                    { kana: "がっこう", roma: "gakkou" },
+                    { kana: "でんしゃ", roma: "densha" },
+                    { kana: "かばん", roma: "kaban" },
+                    { kana: "おふろ", roma: "ofuro" },
+                    { kana: "ふとん", roma: "futon" },
+                    { kana: "はぶらし", roma: "haburashi" },
+                    { kana: "とけい", roma: "tokei" },
+                    { kana: "くつした", roma: "kutsushita" },
+                    { kana: "ほうき", roma: "houki" },
+                    { kana: "あまやどり", roma: "amayadori" }
+                ]
+            },
+            it_digital: {
+                name: "IT・デジタル 💻",
+                words: [
+                    { kana: "ぱそこん", roma: "pasokon" },
+                    { kana: "まうす", roma: "mausu" },
+                    { kana: "すまほ", roma: "sumaho" },
+                    { kana: "いんたーねっと", roma: "intaanetto" },
+                    { kana: "めーる", roma: "meeru" },
+                    { kana: "あぷり", roma: "apuri" },
+                    { kana: "がぞう", roma: "gazou" },
+                    { kana: "どーが", roma: "douga" },
+                    { kana: "きーぼーど", roma: "kiiboodo" },
+                    { kana: "げーむ", roma: "geemu" },
+                    { kana: "ぷろぐらむ", roma: "puroguramu" },
+                    { kana: "すぴーかー", roma: "supiikaa" },
+                    { kana: "ふぁいる", roma: "fairu" },
+                    { kana: "うぇぶ", roma: "webu" },
+                    { kana: "あいうえお", roma: "aiueo" }
+                ]
+            }
+        };
+    </script>
+
+    <!-- Header -->
+    <header class="w-full max-w-5xl mx-auto px-4 pt-6">
+        <div class="retro-card bg-amber-100 p-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-4xl">⌨️</span>
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-extrabold text-[#2d2d2d] tracking-wide flex items-center gap-2">
+                        ぽかぽかタイピング <span class="text-xs bg-[#ff6b6b] text-white px-2 py-0.5 rounded-full border-2 border-[#2d2d2d]">Enter必須！</span>
+                    </h1>
+                    <p class="text-xs text-[#555] font-semibold">ひらがな単語を入力して、最後にエンターキーで決定！</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- Sound Switch -->
+                <button id="soundToggleBtn" onclick="toggleSound()" class="retro-btn bg-emerald-300 px-4 py-2 flex items-center gap-2 text-sm">
+                    <i id="soundIcon" class="fas fa-volume-up"></i>
+                    <span id="soundText">音量: ON</span>
+                </button>
+                <div class="text-right">
+                    <span class="text-xs font-bold text-gray-500 block">ハイスコア</span>
+                    <span id="globalHighScore" class="text-xl font-black text-[#ff6b6b]">0 点</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow w-full max-w-5xl mx-auto px-4 py-6 flex flex-col justify-center">
+
+        <!-- LOBBY / SETUP SCREEN -->
+        <section id="lobbyScreen" class="pop-in flex flex-col gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <!-- Left Column: Guide & Rules -->
+                <div class="retro-card p-6 md:col-span-1 bg-white flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-xl font-extrabold text-[#2d2d2d] mb-4 border-b-4 border-amber-200 pb-2">🎮 あそびかた</h2>
+                        <ul class="space-y-4 text-sm font-semibold text-gray-700">
+                            <li class="flex gap-2">
+                                <span class="text-amber-500">❶</span>
+                                <span>ひらがなの単語を入力欄に入力します。</span>
+                            </li>
+                            <li class="flex gap-2">
+                                <span class="text-amber-500">❷</span>
+                                <span class="text-[#ff5252] font-black">入力し終わったら「Enterキー」を押して送信！Enterを押すまで次へ進みません。</span>
+                            </li>
+                            <li class="flex gap-2">
+                                <span class="text-amber-500">❸</span>
+                                <span>オンライン対戦では相手と交互にお題を入力します。リアルタイムに相手の入力が見えます！</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="mt-6">
+                        <!-- Server Config for Online Battle (Locked) -->
+                        <label class="block text-xs font-extrabold text-gray-500 mb-1">🔗 対戦サーバーWebSocketアドレス（固定）</label>
+                        <div class="relative">
+                            <input type="text" id="wsServerInput" class="w-full text-xs font-mono p-2 border-2 border-gray-300 bg-gray-100 text-gray-500 rounded-lg cursor-not-allowed" value="wss://typing.asukasa462.workers.dev/ws" readonly>
+                            <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400"><i class="fas fa-lock"></i> 固定</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 p-3 bg-amber-50 rounded-xl border border-dashed border-amber-300 text-xs text-gray-600">
+                        💡 <strong>IME確定対応システム：</strong><br>
+                        日本語入力（かな入力）の変換確定用Enterと、回答確定のEnterを正しく識別します。変換キーを何度押しても誤送信になりません！
+                    </div>
+                </div>
+
+                <!-- Right Column: Setup Panel -->
+                <div class="retro-card p-6 md:col-span-2 bg-[#fdfaf6] flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-xl font-extrabold text-[#2d2d2d] mb-4 border-b-4 border-amber-200 pb-2">⚙️ モードを選んでスタート！</h2>
+                        
+                        <!-- Input Mode Selector -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-extrabold text-[#2d2d2d] mb-2">● 入力モード</label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button onclick="setInputMode('kana')" id="modeKanaBtn" class="retro-btn bg-indigo-200 hover:bg-indigo-300 p-4 flex flex-col items-center justify-center gap-1">
+                                    <span class="text-xl font-black">かな入力</span>
+                                    <span class="text-xs opacity-80">（日本語入力/IMEを使用）</span>
+                                </button>
+                                <button onclick="setInputMode('roma')" id="modeRomaBtn" class="retro-btn bg-amber-100 p-4 flex flex-col items-center justify-center gap-1 opacity-60">
+                                    <span class="text-xl font-black">ローマ字入力</span>
+                                    <span class="text-xs opacity-80">（アルファベットで打つ）</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Category Selector -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-extrabold text-[#2d2d2d] mb-2">● カテゴリーを選択（一人プレイ用）</label>
+                            <div id="categoryGrid" class="grid grid-cols-2 gap-3">
+                                <!-- Dynamic JS integration -->
+                            </div>
+                        </div>
+
+                        <!-- Time Selector -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-extrabold text-[#2d2d2d] mb-2">● 制限時間（一人プレイ用）</label>
+                            <div class="flex gap-4">
+                                <button onclick="setTimeLimit(30)" id="time30Btn" class="retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60">30秒</button>
+                                <button onclick="setTimeLimit(60)" id="time60Btn" class="retro-btn bg-[#ffb84c] flex-1 py-2 font-bold">60秒</button>
+                                <button onclick="setTimeLimit(90)" id="time90Btn" class="retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60">90秒</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Single Player Start -->
+                        <button onclick="startGame()" class="retro-btn bg-[#ff6b6b] hover:bg-[#ff8484] text-white text-xl py-4 flex items-center justify-center gap-3">
+                            <span>ひとりで練習！</span>
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <!-- Multiplayer Start -->
+                        <button onclick="startMatching()" class="retro-btn bg-indigo-500 hover:bg-indigo-600 text-white text-xl py-4 flex items-center justify-center gap-3">
+                            <span>オンライン対戦！</span>
+                            <i class="fas fa-globe"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- MATCHING OVERLAY SCREEN -->
+        <section id="matchingScreen" class="pop-in hidden flex flex-col items-center justify-center py-12">
+            <div class="retro-card bg-white p-8 max-w-md w-full text-center flex flex-col items-center gap-6">
+                <!-- Radar animation -->
+                <div class="w-24 h-24 bg-rose-100 rounded-full flex items-center justify-center radar-pulse border-4 border-rose-500">
+                    <i class="fas fa-search text-3xl text-rose-500"></i>
+                </div>
+                <div>
+                    <h2 class="text-2xl font-black text-[#2d2d2d]">対戦相手をさがしています...</h2>
+                    <p class="text-sm text-gray-500 font-semibold mt-1">ただいま待機室でマッチング中</p>
+                </div>
+                <!-- Countdown -->
+                <div class="bg-gray-100 border-2 border-gray-400 px-4 py-2 rounded-xl text-lg font-black text-gray-700">
+                    タイムアウトまで: <span id="matchingTimer" class="font-mono text-rose-500 text-2xl">15</span> 秒
+                </div>
+                <button onclick="cancelMatching()" class="retro-btn bg-gray-200 hover:bg-gray-300 w-full py-2">
+                    マッチングをやめる
+                </button>
+            </div>
+        </section>
+
+        <!-- COUNTDOWN OVERLAY SCREEN -->
+        <section id="countdownScreen" class="pop-in hidden flex flex-col items-center justify-center py-12">
+            <div class="retro-card bg-amber-50 p-12 max-w-sm w-full text-center flex flex-col items-center gap-4">
+                <span class="text-xs bg-indigo-500 text-white font-extrabold px-3 py-1 rounded-full border-2 border-[#2d2d2d]">MATCHING SUCCESS!</span>
+                <div class="flex justify-around w-full items-center my-4">
+                    <div class="flex flex-col items-center">
+                        <span class="text-3xl">👤</span>
+                        <span class="text-sm font-black text-gray-700">あなた</span>
+                    </div>
+                    <span class="text-xl font-black text-gray-400">VS</span>
+                    <div class="flex flex-col items-center">
+                        <span class="text-3xl">🤖</span>
+                        <span id="opponentNameDisplay" class="text-sm font-black text-indigo-600">ライバル</span>
+                    </div>
+                </div>
+                <div id="battleCountdownNumber" class="text-8xl font-black text-[#ff6b6b] font-mono scale-110">3</div>
+                <p class="text-xs text-gray-500 font-bold">間もなくタイピングバトルが始まります！</p>
+            </div>
+        </section>
+
+        <!-- GAME PLAY SCREEN -->
+        <section id="gameScreen" class="pop-in hidden flex flex-col gap-6">
+            <!-- Top Dashboard Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="retro-card bg-rose-100 p-3 flex flex-col items-center justify-center">
+                    <span class="text-xs font-bold text-[#2d2d2d] opacity-70">のこり時間 / 状態</span>
+                    <span id="timerDisplay" class="text-3xl font-black text-rose-600 font-mono">60s</span>
+                </div>
+                <div class="retro-card bg-emerald-100 p-3 flex flex-col items-center justify-center">
+                    <span id="scoreTitle" class="text-xs font-bold text-[#2d2d2d] opacity-70">スコア</span>
+                    <span id="scoreDisplay" class="text-3xl font-black text-emerald-600 font-mono">0</span>
+                </div>
+                <div class="retro-card bg-cyan-100 p-3 flex flex-col items-center justify-center">
+                    <span id="comboTitle" class="text-xs font-bold text-[#2d2d2d] opacity-70">コンボ</span>
+                    <span id="comboDisplay" class="text-3xl font-black text-cyan-600 font-mono">0</span>
+                </div>
+                <div class="retro-card bg-indigo-100 p-3 flex flex-col items-center justify-center">
+                    <span id="wordsCountTitle" class="text-xs font-bold text-[#2d2d2d] opacity-70">正解単語</span>
+                    <span id="wordsCountDisplay" class="text-3xl font-black text-indigo-600 font-mono">0 / 0</span>
+                </div>
+            </div>
+
+            <!-- Multiplayer Scoreboards (Hidden in Single Player Mode) -->
+            <div id="onlineScoreboard" class="hidden grid grid-cols-2 gap-4">
+                <div class="retro-card bg-amber-50 p-3 flex justify-between items-center px-6">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">👤</span>
+                        <span class="font-bold text-gray-700">あなた</span>
+                    </div>
+                    <span id="myOnlineScore" class="text-2xl font-black text-emerald-600">0 点</span>
+                </div>
+                <div class="retro-card bg-indigo-50 p-3 flex justify-between items-center px-6">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">🤖</span>
+                        <span id="opponentNameBoard" class="font-bold text-indigo-700">ライバル</span>
+                    </div>
+                    <span id="opponentOnlineScore" class="text-2xl font-black text-indigo-600">0 点</span>
+                </div>
+            </div>
+
+            <!-- Turn Banner (For multiplayer) -->
+            <div id="battleTurnBanner" class="hidden w-full text-center py-2 rounded-xl border-4 border-[#2d2d2d] font-black text-lg shadow-sm">
+                あなたのターン！
+            </div>
+
+            <!-- Typing Center Card -->
+            <div id="wordContainerCard" class="retro-card bg-white p-6 md:p-12 flex flex-col items-center justify-center min-h-[300px] relative">
+                
+                <!-- Category Tag -->
+                <div id="activeCategoryTag" class="absolute top-4 left-4 bg-amber-200 border-2 border-[#2d2d2d] px-3 py-1 rounded-full text-xs font-extrabold text-[#2d2d2d]">
+                    カテゴリー
+                </div>
+
+                <!-- Word Display Screen -->
+                <div class="text-center w-full max-w-xl mx-auto flex flex-col items-center justify-center">
+                    <!-- Main Target Word (Japanese) -->
+                    <div id="targetWordKana" class="text-4xl md:text-6xl font-black text-[#2d2d2d] tracking-wider mb-2 font-kiwi bounce-slow drop-shadow-sm">
+                        おにぎり
+                    </div>
+                    
+                    <!-- Romaji Guide (Visible if in Romaji mode) -->
+                    <div id="targetWordRomaContainer" class="mb-8 min-h-[2rem]">
+                        <div id="targetWordRoma" class="text-lg md:text-2xl font-black text-gray-400 tracking-widest font-mono">
+                            onigiri
+                        </div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="w-full relative max-w-lg">
+                        <input type="text" id="typingInput" 
+                               class="retro-input w-full text-center text-2xl md:text-3xl font-extrabold py-4 px-6 bg-[#fafafa] text-[#2d2d2d]" 
+                               placeholder="ここに文字を入力..." 
+                               autocomplete="off" 
+                               autocorrect="off" 
+                               autocapitalize="off" 
+                               spellcheck="false">
+                        
+                        <!-- Floating Check/Status Sign inside input -->
+                        <div id="inputCheckIcon" class="absolute right-4 top-1/2 -translate-y-1/2 text-2xl hidden">
+                            <i class="fas fa-check text-emerald-500"></i>
+                        </div>
+                    </div>
+
+                    <!-- Realtime sync preview of opponent's typing -->
+                    <div id="opponentTypingPreviewContainer" class="hidden mt-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-2 text-sm font-semibold text-indigo-700 w-full max-w-lg text-center">
+                        💬 相手が入力を開始するのを持っています...
+                    </div>
+
+                    <!-- Action Prompt Guide -->
+                    <div class="mt-4 flex flex-col items-center gap-1">
+                        <div class="text-sm font-bold text-gray-500 flex items-center gap-2">
+                            <span>打ち終わったら必ず</span>
+                            <kbd class="px-2 py-1 bg-gray-200 border-2 border-gray-400 rounded-lg text-xs font-black text-gray-700 shadow-sm font-mono">Enter</kbd>
+                            <span>キーを押してください！</span>
+                        </div>
+                        <p id="compositionWarning" class="text-xs text-amber-600 font-bold hidden">
+                            ⚠️ 日本語の変換確定Enterです。次へ進むためもう一度Enterを押してください！
+                        </p>
+                    </div>
+
+                </div>
+
+                <!-- Small Visual Feedback Toast -->
+                <div id="feedbackToast" class="absolute bottom-4 text-sm font-extrabold opacity-0 transition-opacity duration-200">
+                    GOOD! +100
+                </div>
+
+            </div>
+
+            <!-- Lower action bar -->
+            <div class="flex justify-between items-center px-2">
+                <button onclick="abortGame()" class="retro-btn bg-red-300 hover:bg-red-400 px-4 py-2 text-sm">
+                    <i class="fas fa-times mr-1"></i> とちゅうでやめる
+                </button>
+                <div class="text-xs font-semibold text-gray-500">
+                    ※ 読めない・スキップしたい場合は、何も入力せず <kbd class="px-1.5 py-0.5 bg-gray-200 border border-gray-400 rounded">Enter</kbd> を押すとスキップできます（スコア微減）
+                </div>
+            </div>
+        </section>
+
+        <!-- RESULT SCREEN -->
+        <section id="resultScreen" class="pop-in hidden flex flex-col gap-6">
+            <div class="retro-card bg-amber-50 p-6 md:p-8 text-center relative overflow-hidden">
+                <!-- Ribbon Graphic -->
+                <div class="absolute -right-16 -top-16 w-36 h-36 bg-yellow-400 rotate-45 flex items-end justify-center pb-4 border-b-4 border-dashed border-[#2d2d2d]">
+                    <span class="font-black text-[#2d2d2d] text-sm">FINISH!</span>
+                </div>
+
+                <h2 id="resultMainTitle" class="text-3xl md:text-4xl font-black text-[#2d2d2d] mb-2 font-kiwi">🎉 タイピング結果 🎉</h2>
+                <p id="resultSubTitle" class="text-gray-600 font-semibold mb-6">おつかれさまでした！あなたの素晴らしい成績です。</p>
+
+                <!-- Core Score Dashboard -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto mb-8">
+                    <div class="bg-white p-4 rounded-2xl border-2 border-[#2d2d2d]">
+                        <span class="text-xs font-bold text-gray-500 block mb-1">獲得スコア</span>
+                        <span id="resultScore" class="text-3xl font-black text-[#ff6b6b]">0</span>
+                        <span class="text-xs font-bold text-gray-400 block mt-1">点</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border-2 border-[#2d2d2d]">
+                        <span class="text-xs font-bold text-gray-500 block mb-1">正解単語数</span>
+                        <span id="resultWordsCount" class="text-3xl font-black text-indigo-600">0 / 0</span>
+                        <span class="text-xs font-bold text-gray-400 block mt-1">単語</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border-2 border-[#2d2d2d]">
+                        <span class="text-xs font-bold text-gray-500 block mb-1">タイピング速度 (WPM)</span>
+                        <span id="resultWpm" class="text-3xl font-black text-emerald-600">0</span>
+                        <span class="text-xs font-bold text-gray-400 block mt-1">文字/分</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border-2 border-[#2d2d2d]">
+                        <span class="text-xs font-bold text-gray-500 block mb-1">最大コンボ</span>
+                        <span id="resultMaxCombo" class="text-3xl font-black text-cyan-600">0</span>
+                        <span class="text-xs font-bold text-gray-400 block mt-1">連続</span>
+                    </div>
+                </div>
+
+                <!-- Custom feedback text based on performance -->
+                <div class="bg-white p-4 rounded-2xl border-2 border-[#2d2d2d] max-w-lg mx-auto mb-8">
+                    <h4 class="font-extrabold text-[#2d2d2d] text-base mb-1">🏆 称号 🏆</h4>
+                    <p id="resultRankText" class="text-lg font-black text-amber-500">ひよこ級タイパー</p>
+                    <p id="resultFeedbackText" class="text-xs text-gray-500 mt-2 font-semibold">ゆっくりでも確実に入力してエンターを押せるようになりましょう！</p>
+                </div>
+
+                <!-- Detailed History Log Expansion (Visible if non-empty) -->
+                <div id="resultHistoryContainer" class="max-w-3xl mx-auto mb-8">
+                    <h3 class="text-lg font-extrabold text-[#2d2d2d] text-left mb-3 flex items-center gap-2">
+                        <i class="fas fa-history"></i>
+                        <span>今回のタイピング履歴</span>
+                    </h3>
+                    <div class="bg-white rounded-2xl border-2 border-[#2d2d2d] max-h-64 overflow-y-auto">
+                        <table class="w-full text-left text-sm border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100 border-b-2 border-gray-300 font-extrabold text-gray-700">
+                                    <th class="p-3">お題の単語</th>
+                                    <th class="p-3">あなたの入力</th>
+                                    <th class="p-3">結果</th>
+                                    <th class="p-3 text-right">スピード</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="font-semibold text-gray-700 divide-y divide-gray-200">
+                                <!-- Dynamic JS integration -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Navigation Buttons -->
+                <div class="flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto">
+                    <button id="resultRetryBtn" onclick="startGame()" class="retro-btn bg-[#ffb84c] flex-1 py-3 text-lg">
+                        <i class="fas fa-redo mr-2"></i> 同じ設定でリトライ
+                    </button>
+                    <button onclick="backToLobby()" class="retro-btn bg-white flex-1 py-3 text-lg">
+                        <i class="fas fa-home mr-2"></i> ロビーに戻る
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Error Custom Modal -->
+    <div id="errorModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="retro-card bg-white p-6 max-w-md w-full text-center flex flex-col items-center gap-4">
+            <span class="text-5xl text-rose-500">😢</span>
+            <h3 class="text-xl font-black text-gray-800" id="errorModalTitle">エラーが発生しました</h3>
+            <p class="text-sm text-gray-600" id="errorModalBody">対戦相手が見つかりませんでした。時間帯を変えてもう一度お試しください。</p>
+            <button onclick="closeErrorModal()" class="retro-btn bg-rose-400 hover:bg-rose-500 text-white w-full py-2">閉じる</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-5xl mx-auto px-4 mt-auto">
+        <div class="text-center text-xs font-semibold text-gray-500">
+            &copy; 2026 ぽかぽかタイピング. すべてのタイピストに癒やしと成長を。
+        </div>
+    </footer>
+
+    <!-- GAME LOGIC SCRIPT -->
+    <script>
+        // Sound System powered by Tone.js
+        let synth = null;
+        let polySynth = null;
+        let isMuted = false;
+
+        function initAudio() {
+            if (!synth) {
+                synth = new Tone.MonoSynth({
+                    oscillator: { type: "square" },
+                    envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.1 }
+                }).toDestination();
+                
+                polySynth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.2 }
+                }).toDestination();
+                
+                synth.volume.value = -12;
+                polySynth.volume.value = -10;
+            }
+        }
+
+        function playSound(type) {
+            if (isMuted) return;
+            try {
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                initAudio();
+
+                if (type === 'keypress') {
+                    synth.triggerAttackRelease("C4", "32n");
+                } else if (type === 'correct') {
+                    const now = Tone.now();
+                    polySynth.triggerAttackRelease("E5", "16n", now);
+                    polySynth.triggerAttackRelease("G5", "16n", now + 0.08);
+                } else if (type === 'incorrect') {
+                    synth.triggerAttackRelease("F2", "8n");
+                } else if (type === 'combo') {
+                    const now = Tone.now();
+                    polySynth.triggerAttackRelease(["C6", "E6", "G6"], "8n", now);
+                } else if (type === 'start') {
+                    const now = Tone.now();
+                    polySynth.triggerAttackRelease("C5", "8n", now);
+                    polySynth.triggerAttackRelease("F5", "8n", now + 0.1);
+                    polySynth.triggerAttackRelease("A5", "4n", now + 0.2);
+                } else if (type === 'timeup') {
+                    const now = Tone.now();
+                    polySynth.triggerAttackRelease(["C4", "E4", "G4"], "4n", now);
+                    polySynth.triggerAttackRelease(["C3", "E3", "G3"], "2n", now + 0.25);
+                } else if (type === 'skip') {
+                    synth.triggerAttackRelease("G3", "16n");
+                } else if (type === 'ready') {
+                    synth.triggerAttackRelease("G4", "8n");
+                } else if (type === 'fight') {
+                    polySynth.triggerAttackRelease(["C5", "E5", "G5"], "4n");
+                }
+            } catch (error) {
+                console.error("Audio Playback Error:", error);
+            }
+        }
+
+        function toggleSound() {
+            isMuted = !isMuted;
+            const icon = document.getElementById("soundIcon");
+            const text = document.getElementById("soundText");
+            const btn = document.getElementById("soundToggleBtn");
+            
+            if (isMuted) {
+                icon.className = "fas fa-volume-mute";
+                text.textContent = "音量: OFF";
+                btn.classList.remove("bg-emerald-300");
+                btn.classList.add("bg-gray-300");
+            } else {
+                icon.className = "fas fa-volume-up";
+                text.textContent = "音量: ON";
+                btn.classList.remove("bg-gray-300");
+                btn.classList.add("bg-emerald-300");
+                playSound('keypress');
+            }
+        }
+
+        // Game State Variables
+        let currentGameMode = 'kana'; 
+        let currentCategory = 'animals';
+        let currentTimeLimit = 60; 
+        let currentTimer = 60;
+        let timerInterval = null;
+        let isGameRunning = false;
+        
+        let score = 0;
+        let combo = 0;
+        let maxCombo = 0;
+        let totalWordsAttempted = 0;
+        let correctWordsCount = 0;
+        let gameHistory = []; 
+        let activeWordIndex = 0;
+        let activeWordSet = [];
+        let wordStartTime = 0;
+        let globalHighScore = 0;
+
+        // IME Composition Tracking
+        let isIMEComposing = false;
+
+        // --- ONLINE MULTIPLAYER STATE ---
+        let isOnlineMode = false;
+        let socket = null;
+        let matchingTimeoutId = null;
+        let matchingCounter = 15;
+        let matchingInterval = null;
+        let myId = "";
+        let opponentId = "";
+        let opponentName = "ライバル";
+        let isMyTurn = false;
+        let onlineRound = 0; // max 10
+        let myOnlineScore = 0;
+        let opponentOnlineScore = 0;
+        let currentOnlineWord = null;
+
+        // Load Global HighScore from LocalStorage
+        window.addEventListener('load', () => {
+            const savedHighScore = localStorage.getItem('typing_high_score');
+            if (savedHighScore) {
+                globalHighScore = parseInt(savedHighScore, 10);
+                document.getElementById('globalHighScore').textContent = `${globalHighScore} 点`;
+            }
+            renderCategorySelector();
+            updateSetupUI();
+        });
+
+        function renderCategorySelector() {
+            const grid = document.getElementById('categoryGrid');
+            grid.innerHTML = '';
+            Object.keys(CATEGORIES).forEach(key => {
+                const cat = CATEGORIES[key];
+                const btn = document.createElement('button');
+                btn.id = `catBtn_${key}`;
+                btn.onclick = () => setCategory(key);
+                btn.className = `retro-btn p-3 text-sm flex flex-col items-center justify-center gap-1 transition-opacity ${
+                    key === currentCategory ? 'bg-[#ffb84c]' : 'bg-amber-100 opacity-60'
+                }`;
+                btn.innerHTML = `
+                    <span class="font-extrabold">${cat.name}</span>
+                    <span class="text-xs opacity-75">${cat.words.length}語収録</span>
+                `;
+                grid.appendChild(btn);
+            });
+        }
+
+        function setCategory(categoryKey) {
+            currentCategory = categoryKey;
+            playSound('keypress');
+            Object.keys(CATEGORIES).forEach(key => {
+                const btn = document.getElementById(`catBtn_${key}`);
+                if (btn) {
+                    if (key === currentCategory) {
+                        btn.className = "retro-btn p-3 text-sm flex flex-col items-center justify-center gap-1 bg-[#ffb84c] opacity-100";
+                    } else {
+                        btn.className = "retro-btn p-3 text-sm flex flex-col items-center justify-center gap-1 bg-amber-100 opacity-60";
+                    }
+                }
+            });
+        }
+
+        function setInputMode(mode) {
+            currentGameMode = mode;
+            playSound('keypress');
+            updateSetupUI();
+        }
+
+        function setTimeLimit(seconds) {
+            currentTimeLimit = seconds;
+            playSound('keypress');
+            updateSetupUI();
+        }
+
+        function updateSetupUI() {
+            const kanaBtn = document.getElementById('modeKanaBtn');
+            const romaBtn = document.getElementById('modeRomaBtn');
+            if (currentGameMode === 'kana') {
+                kanaBtn.className = "retro-btn bg-indigo-200 hover:bg-indigo-300 p-4 flex flex-col items-center justify-center gap-1 opacity-100";
+                romaBtn.className = "retro-btn bg-amber-100 p-4 flex flex-col items-center justify-center gap-1 opacity-60";
+            } else {
+                kanaBtn.className = "retro-btn bg-amber-100 p-4 flex flex-col items-center justify-center gap-1 opacity-60";
+                romaBtn.className = "retro-btn bg-indigo-200 hover:bg-indigo-300 p-4 flex flex-col items-center justify-center gap-1 opacity-100";
+            }
+
+            const btn30 = document.getElementById('time30Btn');
+            const btn60 = document.getElementById('time60Btn');
+            const btn90 = document.getElementById('time90Btn');
+            [btn30, btn60, btn90].forEach(b => {
+                b.className = "retro-btn bg-amber-100 flex-1 py-2 font-bold opacity-60";
+            });
+
+            if (currentTimeLimit === 30) btn30.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+            else if (currentTimeLimit === 60) btn60.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+            else if (currentTimeLimit === 90) btn90.className = "retro-btn bg-[#ffb84c] flex-1 py-2 font-bold opacity-100";
+        }
+
+        function showScreen(screenId) {
+            document.getElementById('lobbyScreen').classList.add('hidden');
+            document.getElementById('matchingScreen').classList.add('hidden');
+            document.getElementById('countdownScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('resultScreen').classList.add('hidden');
+            
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        // --- MATCHING FLOW ---
+        function startMatching() {
+            initAudio();
+            isOnlineMode = true;
+            myOnlineScore = 0;
+            opponentOnlineScore = 0;
+            onlineRound = 0;
+            
+            showScreen('matchingScreen');
+            matchingCounter = 15;
+            document.getElementById('matchingTimer').textContent = matchingCounter;
+
+            // Start countdown timer
+            clearInterval(matchingInterval);
+            matchingInterval = setInterval(() => {
+                matchingCounter--;
+                document.getElementById('matchingTimer').textContent = matchingCounter;
+                if (matchingCounter <= 0) {
+                    handleMatchingTimeout();
+                }
+            }, 1000);
+
+            // Connect to Cloudflare Workers WebSocket (URL is strictly locked here)
+            const wsUrl = "wss://typing.asukasa462.workers.dev/ws";
+            try {
+                socket = new WebSocket(wsUrl);
+                
+                socket.onopen = () => {
+                    // Match request inside category & mode
+                    const request = {
+                        action: 'match',
+                        mode: currentGameMode
+                    };
+                    socket.send(JSON.stringify(request));
+                };
+
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'welcome') {
+                        myId = msg.id;
+                        return;
+                    }
+                    handleServerMessage(msg);
+                };
+
+                socket.onclose = () => {
+                    if (isOnlineMode && isGameRunning) {
+                        showErrorModal("対戦エラー", "対戦相手が退室したか、通信が切断されました。");
+                        abortGame(true);
+                    }
+                };
+
+                socket.onerror = (err) => {
+                    console.error("WS error: ", err);
+                    handleMatchingTimeout();
+                };
+
+            } catch (err) {
+                console.error(err);
+                handleMatchingTimeout();
+            }
+        }
+
+        function cancelMatching() {
+            cleanupWebSocket();
+            backToLobby();
+        }
+
+        function handleMatchingTimeout() {
+            cleanupWebSocket();
+            playSound('incorrect');
+            showErrorModal("お相手が見つかりませんでした", "15秒間に対戦相手が見つかりませんでした。別の時間帯で再度お試しください。");
+            backToLobby();
+        }
+
+        function cleanupWebSocket() {
+            clearInterval(matchingInterval);
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        }
+
+        // --- WEB SOCKET MESSAGE CHANNELS ---
+        function handleServerMessage(msg) {
+            switch (msg.type) {
+                case 'matched':
+                    // Match found! Close search screen, launch 3s countdown
+                    clearInterval(matchingInterval);
+                    opponentId = msg.opponentId;
+                    opponentName = msg.opponentName;
+                    
+                    document.getElementById('opponentNameDisplay').textContent = opponentName;
+                    document.getElementById('opponentNameBoard').textContent = opponentName;
+                    showScreen('countdownScreen');
+                    startBattleCountdown(msg.firstTurnPlayerId);
+                    break;
+
+                case 'next_turn':
+                    // Set up active turn word from server
+                    setupNextTurn(msg);
+                    break;
+
+                case 'sync_preview':
+                    // Real-time peer typing tracking view
+                    if (!isMyTurn) {
+                        const previewContainer = document.getElementById('opponentTypingPreviewContainer');
+                        if (msg.text) {
+                            previewContainer.textContent = `💬 ${opponentName}: 「 ${msg.text} 」`;
+                        } else {
+                            previewContainer.textContent = `💬 ${opponentName}が入力するのを待っています...`;
+                        }
+                    }
+                    break;
+
+                case 'turn_result':
+                    // Sync points earned and totals
+                    myOnlineScore = (myId === msg.scores.player1Id) ? msg.scores.player1 : msg.scores.player2;
+                    opponentOnlineScore = (myId === msg.scores.player1Id) ? msg.scores.player2 : msg.scores.player1;
+                    
+                    document.getElementById('myOnlineScore').textContent = `${myOnlineScore} 点`;
+                    document.getElementById('opponentOnlineScore').textContent = `${opponentOnlineScore} 点`;
+                    
+                    if (msg.playerId !== myId) {
+                        // Display transient results on screen for Opponent's submissions
+                        if (msg.status === 'correct') {
+                            playSound('correct');
+                            showToast(`${opponentName}が正解！ +${msg.points}`, "text-indigo-500");
+                        } else if (msg.status === 'skip') {
+                            playSound('skip');
+                            showToast(`${opponentName}がスキップ！`, "text-gray-400");
+                        } else {
+                            playSound('incorrect');
+                            showToast(`${opponentName}が間違えました！`, "text-rose-400");
+                        }
+                    }
+                    break;
+
+                case 'game_over':
+                    isGameRunning = false;
+                    cleanupWebSocket();
+                    showOnlineResult(msg);
+                    break;
+            }
+        }
+
+        // --- 3, 2, 1 COUNTDOWN ---
+        function startBattleCountdown(firstTurnId) {
+            let count = 3;
+            const counterEl = document.getElementById('battleCountdownNumber');
+            counterEl.textContent = count;
+            playSound('ready');
+
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    counterEl.textContent = count;
+                    playSound('ready');
+                } else if (count === 0) {
+                    counterEl.textContent = "対戦開始！";
+                    playSound('fight');
+                } else {
+                    clearInterval(interval);
+                    // Actual start of online combat
+                    launchOnlineGame(firstTurnId);
+                }
+            }, 1000);
+        }
+
+        // --- START GAME WORKFLOW ---
+        function launchOnlineGame(firstTurnId) {
+            isGameRunning = true;
+            gameHistory = [];
+            
+            // Adjust layouts for online battle styles
+            document.getElementById('onlineScoreboard').classList.remove('hidden');
+            document.getElementById('battleTurnBanner').classList.remove('hidden');
+            document.getElementById('opponentTypingPreviewContainer').classList.remove('hidden');
+            
+            // Re-label stats cards titles
+            document.getElementById('scoreTitle').textContent = "あなたの得点";
+            document.getElementById('comboTitle').textContent = "現在のコンボ";
+            document.getElementById('wordsCountTitle').textContent = "対戦の進行状況";
+            
+            document.getElementById('timerDisplay').textContent = "オンライン戦";
+            document.getElementById('myOnlineScore').textContent = "0 点";
+            document.getElementById('opponentOnlineScore').textContent = "0 点";
+
+            showScreen('gameScreen');
+        }
+
+        // Setup current Turn word sent by server
+        function setupNextTurn(turnData) {
+            onlineRound = turnData.round;
+            isMyTurn = (turnData.turnPlayerId === myId);
+            currentOnlineWord = turnData.word;
+
+            // Progress text
+            document.getElementById('wordsCountDisplay').textContent = `ターン ${onlineRound} / 10`;
+
+            const turnBanner = document.getElementById('battleTurnBanner');
+            const inputEl = document.getElementById('typingInput');
+            const previewContainer = document.getElementById('opponentTypingPreviewContainer');
+
+            // Set up banner & controls based on turn Ownership
+            if (isMyTurn) {
+                turnBanner.textContent = "⚡ あなたのターンです！";
+                turnBanner.className = "w-full text-center py-2 rounded-xl border-4 border-[#2d2d2d] font-black text-lg shadow-sm bg-emerald-200 text-[#2d2d2d]";
+                inputEl.disabled = false;
+                inputEl.placeholder = "ここに入力してEnterで決定！";
+                previewContainer.classList.add('hidden');
+                
+                // Keep input focused
+                setTimeout(() => inputEl.focus(), 100);
+            } else {
+                turnBanner.textContent = `⏳ ${opponentName}のターンです...`;
+                turnBanner.className = "w-full text-center py-2 rounded-xl border-4 border-[#2d2d2d] font-black text-lg shadow-sm bg-indigo-200 text-indigo-800";
+                inputEl.disabled = true;
+                inputEl.placeholder = "お相手の入力を待っています...";
+                previewContainer.classList.remove('hidden');
+                previewContainer.textContent = `💬 ${opponentName}が入力を開始するのを持っています...`;
+            }
+
+            // Word display update
+            const kanaDisplay = document.getElementById('targetWordKana');
+            const romaDisplay = document.getElementById('targetWordRoma');
+            const romaContainer = document.getElementById('targetWordRomaContainer');
+
+            kanaDisplay.textContent = currentOnlineWord.kana;
+            if (currentGameMode === 'roma') {
+                romaContainer.classList.remove('invisible');
+                romaDisplay.textContent = currentOnlineWord.roma;
+            } else {
+                romaContainer.classList.add('invisible');
+                romaDisplay.textContent = "";
+            }
+
+            inputEl.value = "";
+            inputEl.classList.remove('bg-rose-50', 'bg-emerald-50');
+            document.getElementById('inputCheckIcon').classList.add('hidden');
+            
+            wordStartTime = Date.now();
+            updateTargetUIFeedback();
+        }
+
+        // --- SINGLE-PLAYER INITS ---
+        function startGame() {
+            isOnlineMode = false;
+            isGameRunning = true;
+            score = 0;
+            combo = 0;
+            maxCombo = 0;
+            totalWordsAttempted = 0;
+            correctWordsCount = 0;
+            gameHistory = [];
+            currentTimer = currentTimeLimit;
+            
+            // Hide Online specific Layout elements
+            document.getElementById('onlineScoreboard').classList.add('hidden');
+            document.getElementById('battleTurnBanner').classList.add('hidden');
+            document.getElementById('opponentTypingPreviewContainer').classList.add('hidden');
+            
+            // Reset to classic labels
+            document.getElementById('scoreTitle').textContent = "スコア";
+            document.getElementById('comboTitle').textContent = "コンボ";
+            document.getElementById('wordsCountTitle').textContent = "正解単語";
+
+            const originalWords = CATEGORIES[currentCategory].words;
+            activeWordSet = [...originalWords].sort(() => Math.random() - 0.5);
+            activeWordIndex = 0;
+
+            document.getElementById('scoreDisplay').textContent = "0";
+            document.getElementById('comboDisplay').textContent = "0";
+            document.getElementById('timerDisplay').textContent = `${currentTimer}s`;
+            document.getElementById('wordsCountDisplay').textContent = `0 / ${activeWordSet.length}`;
+            
+            showNextWord();
+            showScreen('gameScreen');
+            playSound('start');
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                currentTimer--;
+                document.getElementById('timerDisplay').textContent = `${currentTimer}s`;
+                
+                if (currentTimer <= 10) {
+                    document.getElementById('timerDisplay').classList.add('text-red-600', 'scale-110');
+                } else {
+                    document.getElementById('timerDisplay').classList.remove('text-red-600', 'scale-110');
+                }
+
+                if (currentTimer <= 0) {
+                    endGame();
+                }
+            }, 1000);
+
+            setTimeout(() => {
+                const inputEl = document.getElementById('typingInput');
+                inputEl.disabled = false;
+                inputEl.focus();
+                inputEl.value = "";
+            }, 100);
+        }
+
+        function showNextWord() {
+            if (activeWordIndex >= activeWordSet.length) {
+                const originalWords = CATEGORIES[currentCategory].words;
+                activeWordSet = [...originalWords].sort(() => Math.random() - 0.5);
+                activeWordIndex = 0;
+            }
+
+            const currentItem = activeWordSet[activeWordIndex];
+            document.getElementById('activeCategoryTag').innerHTML = `<i class="fas fa-folder-open mr-1"></i> ${CATEGORIES[currentCategory].name}`;
+
+            const kanaDisplay = document.getElementById('targetWordKana');
+            const romaDisplay = document.getElementById('targetWordRoma');
+            const romaContainer = document.getElementById('targetWordRomaContainer');
+            
+            kanaDisplay.textContent = currentItem.kana;
+            if (currentGameMode === 'roma') {
+                romaContainer.classList.remove('invisible');
+                romaDisplay.textContent = currentItem.roma;
+            } else {
+                romaContainer.classList.add('invisible');
+                romaDisplay.textContent = "";
+            }
+
+            const inputEl = document.getElementById('typingInput');
+            inputEl.value = "";
+            inputEl.classList.remove('bg-rose-50', 'bg-emerald-50');
+            document.getElementById('inputCheckIcon').classList.add('hidden');
+            
+            wordStartTime = Date.now();
+            updateTargetUIFeedback();
+        }
+
+        // UI highlights for keystroke matching
+        function updateTargetUIFeedback() {
+            const inputVal = document.getElementById('typingInput').value.trim();
+            const currentItem = isOnlineMode ? currentOnlineWord : activeWordSet[activeWordIndex];
+            if (!currentItem) return;
+
+            const kanaDisplay = document.getElementById('targetWordKana');
+            const romaDisplay = document.getElementById('targetWordRoma');
+            
+            if (currentGameMode === 'roma') {
+                const targetRoma = currentItem.roma;
+                let highlighted = "";
+                let matched = true;
+                for (let i = 0; i < targetRoma.length; i++) {
+                    if (matched && i < inputVal.length && inputVal[i].toLowerCase() === targetRoma[i]) {
+                        highlighted += `<span class="text-indigo-600 font-extrabold border-b-2 border-indigo-500">${targetRoma[i]}</span>`;
+                    } else {
+                        matched = false;
+                        highlighted += `<span class="text-gray-400">${targetRoma[i]}</span>`;
+                    }
+                }
+                romaDisplay.innerHTML = highlighted;
+            } else {
+                if (currentItem.kana.startsWith(inputVal)) {
+                    const matchedPart = currentItem.kana.slice(0, inputVal.length);
+                    const unmatchedPart = currentItem.kana.slice(inputVal.length);
+                    kanaDisplay.innerHTML = `<span class="text-emerald-500 font-extrabold">${matchedPart}</span><span class="text-[#2d2d2d]">${unmatchedPart}</span>`;
+                } else {
+                    if (inputVal.length > 0 && !isIMEComposing) {
+                        kanaDisplay.innerHTML = `<span class="text-rose-400">${currentItem.kana}</span>`;
+                    } else {
+                        kanaDisplay.innerHTML = `<span class="text-[#2d2d2d]">${currentItem.kana}</span>`;
+                    }
+                }
+            }
+        }
+
+        // KEYBOARD EVENT LISTENERS
+        const inputEl = document.getElementById('typingInput');
+
+        inputEl.addEventListener('compositionstart', () => {
+            isIMEComposing = true;
+            document.getElementById('compositionWarning').classList.remove('hidden');
+        });
+
+        inputEl.addEventListener('compositionend', () => {
+            isIMEComposing = false;
+            document.getElementById('compositionWarning').classList.add('hidden');
+            updateTargetUIFeedback();
+            // Send keystrokes update in online mode immediately after confirming Hiragana block
+            sendRealtimeKeystroke();
+        });
+
+        inputEl.addEventListener('input', () => {
+            if (!isGameRunning) return;
+            if (!isIMEComposing) {
+                playSound('keypress');
+            }
+            updateTargetUIFeedback();
+            sendRealtimeKeystroke();
+        });
+
+        function sendRealtimeKeystroke() {
+            if (isOnlineMode && isMyTurn && socket) {
+                socket.send(JSON.stringify({
+                    action: 'sync_preview',
+                    text: inputEl.value
+                }));
+            }
+        }
+
+        inputEl.addEventListener('keydown', (event) => {
+            if (!isGameRunning) return;
+            if (event.key === 'Enter') {
+                if (isIMEComposing) return;
+                event.preventDefault();
+                submitAnswer();
+            }
+        });
+
+        // EVALUATIONS & COMMUNICATIONS
+        function submitAnswer() {
+            if (isOnlineMode) {
+                if (!isMyTurn) return; // Prevent out-of-turn submissions
+                submitOnlineAnswer();
+            } else {
+                submitSingleAnswer();
+            }
+        }
+
+        function submitOnlineAnswer() {
+            const inputVal = inputEl.value.trim();
+            const timeTakenSec = Math.min((Date.now() - wordStartTime) / 1000, 15);
+            let isCorrect = false;
+
+            if (currentGameMode === 'roma') {
+                isCorrect = (inputVal.toLowerCase() === currentOnlineWord.roma.toLowerCase());
+            } else {
+                isCorrect = (inputVal === currentOnlineWord.kana);
+            }
+
+            const isSkip = (inputVal === "");
+            let status = 'incorrect';
+            if (isSkip) status = 'skip';
+            else if (isCorrect) status = 'correct';
+
+            // Report results instantly to backend so it triggers state shifts
+            socket.send(JSON.stringify({
+                action: 'submit',
+                status: status,
+                time: timeTakenSec
+            }));
+
+            // Client side feedback
+            if (isSkip) {
+                playSound('skip');
+                showToast("スキップ 💨", "text-gray-500");
+            } else if (isCorrect) {
+                playSound('correct');
+                showToast("せいかい！ ✔️", "text-emerald-500");
+                const card = document.getElementById('wordContainerCard');
+                card.classList.add('correct-pulse');
+                setTimeout(() => card.classList.remove('correct-pulse'), 400);
+            } else {
+                playSound('incorrect');
+                showToast("まちがい！ ❌", "text-rose-500");
+                const card = document.getElementById('wordContainerCard');
+                card.classList.add('shake-anim');
+                setTimeout(() => card.classList.remove('shake-anim'), 300);
+            }
+
+            // Lock input until the server grants next turn
+            inputEl.disabled = true;
+        }
+
+        function submitSingleAnswer() {
+            const inputVal = inputEl.value.trim();
+            const currentItem = activeWordSet[activeWordIndex];
+            const timeTakenSec = Math.min((Date.now() - wordStartTime) / 1000, currentTimeLimit);
+            let isCorrect = false;
+
+            if (currentGameMode === 'roma') {
+                isCorrect = (inputVal.toLowerCase() === currentItem.roma.toLowerCase());
+            } else {
+                isCorrect = (inputVal === currentItem.kana);
+            }
+
+            const isSkip = (inputVal === "");
+            const historyItem = {
+                target: currentItem.kana,
+                input: isSkip ? "(スキップ)" : inputVal,
+                mode: currentGameMode,
+                status: 'skip',
+                time: timeTakenSec.toFixed(1)
+            };
+
+            if (isSkip) {
+                playSound('skip');
+                combo = 0;
+                score = Math.max(0, score - 50);
+                showToast("スキップ 💨 -50", "text-gray-500");
+                historyItem.status = 'skip';
+                totalWordsAttempted++;
+            } else if (isCorrect) {
+                combo++;
+                if (combo > maxCombo) maxCombo = combo;
+                
+                const wordLength = currentGameMode === 'roma' ? currentItem.roma.length : currentItem.kana.length;
+                const baseScore = wordLength * 100;
+                const comboBonus = Math.floor(combo / 5) * 50;
+                const timeBonus = Math.max(0, Math.floor((10 - timeTakenSec) * 20));
+                const pointsEarned = baseScore + comboBonus + timeBonus;
+                
+                score += pointsEarned;
+                correctWordsCount++;
+                totalWordsAttempted++;
+
+                if (combo > 0 && combo % 5 === 0) {
+                    playSound('combo');
+                    showToast(`コンボ!! ${combo}連 🌟 +${pointsEarned}`, "text-cyan-500 scale-110");
+                } else {
+                    playSound('correct');
+                    showToast(`せいかい！ +${pointsEarned}`, "text-emerald-500");
+                }
+
+                historyItem.status = 'correct';
+                const card = document.getElementById('wordContainerCard');
+                card.classList.add('correct-pulse');
+                setTimeout(() => card.classList.remove('correct-pulse'), 400);
+            } else {
+                playSound('incorrect');
+                combo = 0;
+                totalWordsAttempted++;
+                score = Math.max(0, score - 20);
+                showToast("ざんねん！ ❌ -20", "text-rose-500");
+                historyItem.status = 'incorrect';
+
+                const card = document.getElementById('wordContainerCard');
+                card.classList.add('shake-anim');
+                setTimeout(() => card.classList.remove('shake-anim'), 300);
+            }
+
+            gameHistory.push(historyItem);
+
+            document.getElementById('scoreDisplay').textContent = score;
+            document.getElementById('comboDisplay').textContent = combo;
+            document.getElementById('wordsCountDisplay').textContent = `${correctWordsCount} / ${totalWordsAttempted}`;
+
+            activeWordIndex++;
+            showNextWord();
+        }
+
+        function showToast(text, colorClass) {
+            const toast = document.getElementById('feedbackToast');
+            toast.textContent = text;
+            toast.className = `absolute bottom-4 text-lg font-extrabold ${colorClass} opacity-100 transition-none`;
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+            }, 600);
+        }
+
+        function abortGame(force = false) {
+            if (force || confirm("タイピングを途中でやめますか？")) {
+                clearInterval(timerInterval);
+                isGameRunning = false;
+                cleanupWebSocket();
+                backToLobby();
+            }
+        }
+
+        // GAME END FOR SINGLE PLAYER
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(timerInterval);
+            playSound('timeup');
+
+            if (score > globalHighScore) {
+                globalHighScore = score;
+                localStorage.setItem('typing_high_score', globalHighScore);
+                document.getElementById('globalHighScore').textContent = `${globalHighScore} 点`;
+            }
+
+            document.getElementById('resultMainTitle').textContent = "🎉 タイピング結果 🎉";
+            document.getElementById('resultSubTitle').textContent = "おつかれさまでした！あなたの素晴らしい成績です。";
+            document.getElementById('resultScore').textContent = score;
+            document.getElementById('resultWordsCount').textContent = `${correctWordsCount} / ${totalWordsAttempted}`;
+            document.getElementById('resultMaxCombo').textContent = maxCombo;
+            document.getElementById('resultRetryBtn').classList.remove('hidden');
+            document.getElementById('resultHistoryContainer').classList.remove('hidden');
+
+            let totalCorrectChars = 0;
+            gameHistory.forEach(item => {
+                if (item.status === 'correct') totalCorrectChars += item.target.length;
+            });
+            const minutesUsed = currentTimeLimit / 60;
+            const wpm = Math.round(totalCorrectChars / minutesUsed);
+            document.getElementById('resultWpm').textContent = wpm;
+
+            let rank = "ひよこ級タイパー 🐣";
+            let feedback = "ゆっくりでもキーの配置を覚えながら打ってみましょう。継続は力なり！";
+            if (score >= 4000) {
+                rank = "ゴッドタイパー 👑";
+                feedback = "異次元のタイピング速度！神の指先を持っています！すごすぎる！";
+            } else if (score >= 2500) {
+                rank = "いなずま級タイパー ⚡";
+                feedback = "ものすごいスピードです！指先が稲妻のように動いています！";
+            } else if (score >= 1200) {
+                rank = "達人タイパー 🥋";
+                feedback = "すばらしい正確性と速度！かなりの実力者です。";
+            } else if (score >= 600) {
+                rank = "おさるさんタイパー 🐒";
+                feedback = "キーの配置にかなり慣れてきていますね！その調子でコンボを目指しましょう！";
+            }
+            document.getElementById('resultRankText').textContent = rank;
+            document.getElementById('resultFeedbackText').textContent = feedback;
+
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
+            gameHistory.forEach(item => {
+                let statusBadge = `<span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full text-xs">スキップ</span>`;
+                if (item.status === 'correct') {
+                    statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs">せいかい</span>`;
+                } else if (item.status === 'incorrect') {
+                    statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-xs">まちがい</span>`;
+                }
+                const row = document.createElement('tr');
+                row.className = "hover:bg-amber-50/50 transition-colors";
+                row.innerHTML = `
+                    <td class="p-3 font-kiwi">${item.target}</td>
+                    <td class="p-3 font-mono text-gray-500">${item.input}</td>
+                    <td class="p-3">${statusBadge}</td>
+                    <td class="p-3 text-right font-mono text-xs text-gray-500">${item.time} 秒</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            showScreen('resultScreen');
+        }
+
+        // --- ONLINE MULTIPLAYER END GAME SCREEN ---
+        function showOnlineResult(msg) {
+            playSound('timeup');
+
+            const myFinalScore = (myId === msg.player1Id) ? msg.score1 : msg.score2;
+            const oppFinalScore = (myId === msg.player1Id) ? msg.score2 : msg.score1;
+
+            let resultTitle = "";
+            let resultSub = "";
+            let rank = "";
+            let feedback = "";
+
+            if (myFinalScore > oppFinalScore) {
+                resultTitle = "🏆 あなたの勝利！ 🏆";
+                resultSub = `強敵 ${opponentName} を見事撃破しました！`;
+                rank = "天下無双のバトルマスター ⚔️";
+                feedback = "素晴らしい安定感と爆発力のあるタイピングでした。文句なしの完全勝利です！";
+            } else if (myFinalScore < oppFinalScore) {
+                resultTitle = "🥈 あなたの敗北... 🥈";
+                resultSub = `${opponentName} は強かった！次こそはリベンジを。`;
+                rank = "不屈のチャレンジャー 🔥";
+                feedback = "あと一歩及びませんでした！もっとキー入力をスムーズにして再び挑戦しましょう！";
+            } else {
+                resultTitle = "🤝 引き分け！ 🤝";
+                resultSub = "お互い譲らぬ、一歩も引かない熱い名勝負でした！";
+                rank = "良きライバル 🤝";
+                feedback = "完璧な実力伯仲！お互いのタイピングへの真摯な努力が実を結びました。";
+            }
+
+            document.getElementById('resultMainTitle').textContent = resultTitle;
+            document.getElementById('resultSubTitle').textContent = resultSub;
+            
+            // Dashboard values updates
+            document.getElementById('resultScore').textContent = myFinalScore;
+            document.getElementById('resultWordsCount').textContent = `${correctWordsCount} 回成功`;
+            document.getElementById('resultMaxCombo').textContent = "---";
+            document.getElementById('resultWpm').textContent = "---";
+            
+            document.getElementById('resultRankText').textContent = rank;
+            document.getElementById('resultFeedbackText').textContent = feedback;
+
+            // Hide unneeded components in online reports
+            document.getElementById('resultRetryBtn').classList.add('hidden');
+            document.getElementById('resultHistoryContainer').classList.add('hidden');
+
+            showScreen('resultScreen');
+        }
+
+        function backToLobby() {
+            clearInterval(timerInterval);
+            isGameRunning = false;
+            showScreen('lobbyScreen');
+        }
+
+        // ERROR DIALOGS
+        function showErrorModal(title, text) {
+            document.getElementById('errorModalTitle').textContent = title;
+            document.getElementById('errorModalBody').textContent = text;
+            document.getElementById('errorModal').classList.remove('hidden');
+        }
+
+        function closeErrorModal() {
+            document.getElementById('errorModal').classList.add('hidden');
+        }
+    </script>
+
+</body>
+</html>
